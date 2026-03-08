@@ -1,0 +1,150 @@
+---
+title: "Trading cues"
+---
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+library(brms)
+library(tidybayes)
+```
+
+```{r}
+#| label: data
+
+nasal_de <- readRDS("data/nasal_tbl_de.rds") |> 
+  mutate(language = "de")
+nasal_en <- readRDS("data/nasal_tbl_en.rds") |> 
+  rename(language = english)
+```
+
+```{r}
+nasal <- bind_rows(nasal_en, nasal_de) |>
+  drop_na(velumopening_maxvel_on, velumopening_maxvel_off) |>
+  mutate(
+    # nas_ampl = velum2US_velumopening_maxcon_onset,
+    nas_ampl = velum2US_Vokal_max,
+    # Pseudo-gestural nasalisation onset and offset
+    art_nas_on = velumopening_nucleus_on - ((velumopening_nucleus_on - velumopening_maxvel_on) / 2),
+    art_nas_off = velumopening_nucleus_off + ((velumopening_maxvel_off - velumopening_nucleus_off) / 2),
+    # Pseudo-gestural nasalisation duration
+    voweln_dur = (Vokal_off - art_nas_on) * 1000,
+    codan_dur = (art_nas_off - Vokal_off) * 1000,
+    # Proportion of nasalisation in the vowel
+    voweln_prop = voweln_dur / (Vokal_dur * 1000),
+    # Proportion of nasalisation in the coda
+    codan_prop = codan_dur / (Coda_dur * 1000),
+    # Factorisation
+    vow_lang = factor(interaction(vowel, language, sep = "_")),
+    subj_lang = interaction(subject, language, sep = "_"),
+    language = factor(language, levels = c("de", "br", "us")),
+    language = recode_factor(language, "de" = "German", "br" = "British English", "us" = "American English")
+  ) |> 
+  select(nas_ampl:subj_lang, language, Vokal_off, Coda_off, Coda_dur, nc_voicing, Satz_dur)
+
+```
+
+```{r}
+nasal |> 
+  ggplot(aes(voweln_dur)) +
+  geom_density() +
+  geom_rug(alpha = 0.1) +
+  facet_grid(vars(language))
+```
+
+
+```{r}
+nasal |> 
+  filter(voweln_dur > 0) |> 
+  ggplot(aes(qlogis(nas_ampl), log(voweln_dur))) +
+  geom_point(alpha = 0.5) +
+  coord_fixed()
+```
+
+```{r}
+nasal |> 
+  filter(voweln_dur > 0) |> 
+  ggplot(aes(qlogis(nas_ampl), log(voweln_prop))) +
+  geom_point(alpha = 0.5) +
+  facet_wrap(vars(subj_lang))
+```
+
+
+```{r}
+nasal_f <- nasal |> 
+  filter(voweln_dur > 0) |> 
+  mutate(
+    voweln_dur_log = log(voweln_dur),
+    nas_ampl_q = qlogis(nas_ampl)
+  )
+```
+
+```{r}
+mod_1 <- brm(
+  nc_voicing ~ voweln_prop + nas_ampl_q + Satz_dur +
+    (voweln_prop + nas_ampl_q | language/subj_lang),
+  data = nasal_f,
+  family = bernoulli(),
+  seed = 6183,
+  cores = 4,
+  file = "data/cache/mod_1f"
+)
+```
+
+```{r}
+mod_1_draws <- as_draws_df(mod_1)
+```
+
+```{r}
+mod_1_r <- mod_1 |> 
+  spread_draws(`r_language:subj_lang`[condition,term]) |> 
+  pivot_wider(names_from = term, values_from = `r_language:subj_lang`) |> 
+  mutate(
+    language = case_when(
+      str_ends(condition, "de") ~ "DE",
+      str_ends(condition, "us") ~ "US",
+      str_ends(condition, "br") ~ "BR"
+    )
+  )
+```
+
+```{r}
+mod_1_r |> 
+  ggplot(aes(nas_ampl_q, voweln_prop, colour = language)) +
+  geom_point(alpha = 0.5) +
+  facet_grid(vars(language))
+```
+
+```{r}
+mod_1_r |> 
+  ggplot(aes(nas_ampl_q, voweln_prop, colour = language)) +
+  geom_point(alpha = 0.5) +
+  facet_wrap(vars(condition))
+```
+
+
+```{r}
+mod_1_r |> 
+  group_by(language, .draw) |> 
+  summarise(
+    cor = cor(nas_ampl_q, voweln_prop),
+    .groups = "drop_last"
+  ) |> 
+  summarise_draws(cor, ~quantile(.x, c(0.025,0.975)) |> round(2))
+```
+
+```{r}
+mod_1_r |> 
+  group_by(condition, language) |> 
+  summarise(
+    mean_amp = mean(nas_ampl_q), 
+    mean_dur = mean(voweln_prop)
+  ) |> 
+  pivot_longer(mean_amp:mean_dur) |> 
+  ggplot(aes(name, value, group = condition)) +
+  geom_point() +
+  geom_line() +
+  facet_grid(cols = vars(language))
+```
+

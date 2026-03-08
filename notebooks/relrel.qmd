@@ -1,0 +1,96 @@
+---
+title: "Release to release"
+author: "Stefano Coretta"
+---
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+library(brms)
+library(tidybayes)
+library(coretta2018itaegg)
+```
+
+```{r}
+data("ita_egg")
+```
+
+```{r}
+ita_egg |> 
+  ggplot(aes(vowel, rel_rel)) +
+  geom_jitter(alpha = 0.5) +
+  facet_grid(cols = vars(c2_place))
+```
+
+```{r}
+rel <- ita_egg |> 
+  drop_na(rel_rel) |> 
+  mutate(
+    rel_rel_log = log(rel_rel),
+    rel_rel_logz = (rel_rel_log - mean(rel_rel_log)) / sd(rel_rel_log),
+    speech_rate_log = log(speech_rate),
+    speech_rate_logz = (speech_rate_log - mean(speech_rate_log)) / sd(speech_rate_log)
+  )
+```
+
+```{r}
+rel_1 <- brm(
+  rel_rel_logz ~ c2_place + vowel + speech_rate_logz +
+    (c2_place + vowel | speaker),
+  data = rel,
+  cores = 4,
+  seed = 5285,
+  file = "data/cache/rel_1"
+)
+```
+
+```{r}
+rel_1_speaker <- rel_1 |> 
+  spread_draws(r_speaker[speaker,coef])
+```
+
+```{r}
+rel_1_speaker |> 
+  filter(coef == "Intercept") |> 
+  ggplot(aes(r_speaker, reorder(speaker, r_speaker, median))) +
+  geom_vline(xintercept = 0) +
+  stat_halfeye()
+
+rel_1_speaker |> 
+  filter(coef == "voweli") |> 
+  ggplot(aes(r_speaker, reorder(speaker, r_speaker, median))) +
+  geom_vline(xintercept = 0) +
+  stat_halfeye()
+```
+
+```{r}
+rel_1_speaker |> 
+  filter(coef == "c2_placecoronal") |> 
+  ggplot(aes(r_speaker, reorder(speaker, r_speaker, median))) +
+  geom_vline(xintercept = 0) +
+  stat_halfeye()
+
+rel_1_speaker |> 
+  filter(coef == "c2_placevelar") |> 
+  ggplot(aes(r_speaker, reorder(speaker, r_speaker, median))) +
+  geom_vline(xintercept = 0) +
+  stat_halfeye()
+```
+
+```{r}
+rel_1_draws <- as_draws_df(rel_1)
+
+voweli_speaker <- rel_1_draws |> 
+  select(b_voweli, ends_with("voweli]"), .draw) |> 
+  pivot_longer(-c(b_voweli, .draw)) |> 
+  mutate(
+    speaker = str_extract(name, "it\\d\\d"),
+    voweli = b_voweli + value
+  )
+
+voweli_speaker |> 
+  ggplot(aes(voweli, reorder(speaker, voweli, median))) +
+  stat_halfeye()
+```
+
