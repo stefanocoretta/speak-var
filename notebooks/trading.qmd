@@ -1,6 +1,12 @@
 ---
-title: "Trading cues"
+title: "Trading cues to nasalisation: vowel nasalisation duration vs amplitude"
+author: "Stefano Coretta"
+bibliography: references.bib
 ---
+
+## The data
+
+First we attach the necessary packages.
 
 ```{r}
 #| label: setup
@@ -8,77 +14,160 @@ title: "Trading cues"
 library(tidyverse)
 library(brms)
 library(tidybayes)
+theme_set(theme_light())
 ```
+
+The data comes from @carignan2021a and @cunha2024. I refer the reader to the papers for more information on the data. The data is split in two files, one with the German data and one with the American and British English data. The data contains measures from audio recordings and fMRI recordings.
 
 ```{r}
 #| label: data
 
+# German data from Carignan et al 2021
 nasal_de <- readRDS("data/nasal_tbl_de.rds") |> 
   mutate(language = "de")
+
+# English data from Cunha et al 2024
 nasal_en <- readRDS("data/nasal_tbl_en.rds") |> 
   rename(language = english)
 ```
 
+The following code cleans the data and joins the two tibbles into a single tibble `nasal`. The comments explain the meaning of each new column and between parenthesis it says whether the calculations use acoustic, articulatory or both types of measurements.
+
 ```{r}
+#| label: nasal
+
 nasal <- bind_rows(nasal_en, nasal_de) |>
+  
+  # Drop NA values in the specified columns
   drop_na(velumopening_maxvel_on, velumopening_maxvel_off) |>
+  
   mutate(
-    # nas_ampl = velum2US_velumopening_maxcon_onset,
+    # Amplitude of nasalisation within the vowel (articulatory)
     nas_ampl = velum2US_Vokal_max,
-    # Pseudo-gestural nasalisation onset and offset
+    
+    # Pseudo-gestural nasalisation onset and offset (articulatory)
     art_nas_on = velumopening_nucleus_on - ((velumopening_nucleus_on - velumopening_maxvel_on) / 2),
     art_nas_off = velumopening_nucleus_off + ((velumopening_maxvel_off - velumopening_nucleus_off) / 2),
-    # Pseudo-gestural nasalisation duration
+
+    # Pseudo-gestural nasalisation duration within the vowel and within the coda
+    # (acoustic/articulatory)
     voweln_dur = (Vokal_off - art_nas_on) * 1000,
     codan_dur = (art_nas_off - Vokal_off) * 1000,
-    # Proportion of nasalisation in the vowel
+
+    # Proportion of nasalisation in the vowel and coda (acoustic/articulatory)
     voweln_prop = voweln_dur / (Vokal_dur * 1000),
-    # Proportion of nasalisation in the coda
     codan_prop = codan_dur / (Coda_dur * 1000),
+
     # Factorisation
     vow_lang = factor(interaction(vowel, language, sep = "_")),
     subj_lang = interaction(subject, language, sep = "_"),
     language = factor(language, levels = c("de", "br", "us")),
     language = recode_factor(language, "de" = "German", "br" = "British English", "us" = "American English")
   ) |> 
+  
+  # Select necessary columns
   select(nas_ampl:subj_lang, language, Vokal_off, Coda_off, Coda_dur, nc_voicing, Satz_dur)
 
 ```
 
+Here is a preview of the data.
+
 ```{r}
-nasal |> 
-  ggplot(aes(voweln_dur)) +
-  geom_density() +
-  geom_rug(alpha = 0.1) +
-  facet_grid(vars(language))
+#| label: tbl-nasal
+#| tbl-cap: "Preview of the data"
+#| echo: false
+
+knitr::kable(head(nasal), digits = 2)
 ```
 
+## Plotting
+
+@fig-vowelndur shows the density plot of the duration of nasalisation within the vowel in the three languages. Due to the nature of the measurements, some durations are negative (albeit being impossible in principle, nasalisation must start when the nasal consonant starts by definition). The right panel shows the same data but filtered to include only positive duration.
 
 ```{r}
+#| label: fig-vowelndur
+#| fig-cap: "Density plot of the vowel nasalisation duration."
+#| fig-subcap: 
+#| - "All data."
+#| - "Filter data (positive duration)."
+#| layout-ncol: 2
+
+nasal |> 
+  ggplot(aes(voweln_dur, fill = language)) +
+  geom_density() +
+  geom_rug(alpha = 0.1) +
+  facet_grid(vars(language)) +
+  labs(
+    x = "Vowel nasalisation duration (ms)"
+  ) +
+  theme(legend.position = "none")
+
+nasal |> 
+  filter(voweln_dur > 0) |> 
+  ggplot(aes(voweln_dur, fill = language)) +
+  geom_density() +
+  geom_rug(alpha = 0.1) +
+  facet_grid(vars(language)) +
+  labs(
+    x = "Vowel nasalisation duration (ms)"
+  ) +
+  theme(legend.position = "none")
+```
+
+@fig-dur-ampl shows a scatter plot of the amplitude of vowel nasalisation vs its duration. The plot suggests a positive correlation between amplitude and duration (Spearman's $\rho =$ `r round(cor(nasal$nas_ampl, nasal$voweln_dur, method = "spearman"), 2)`).
+
+```{r}
+#| label: fig-dur-ampl
+#| fig-cap: "Scatter plot of vowel nasalisation amplitude vs duration."
+
 nasal |> 
   filter(voweln_dur > 0) |> 
   ggplot(aes(qlogis(nas_ampl), log(voweln_dur))) +
   geom_point(alpha = 0.5) +
-  coord_fixed()
+  labs(
+    x = "Vowel nasalisation amplitude (logistic transf.)",
+    y = "Vowel nasalisation duration (logged)"
+  )
 ```
 
+
 ```{r}
+#| label: fig-dur-ampl-speaker
+#| fig-cap: "Scatter plot of vowel nasalisation amplitude vs duration by speaker."
+
 nasal |> 
   filter(voweln_dur > 0) |> 
   ggplot(aes(qlogis(nas_ampl), log(voweln_prop))) +
   geom_point(alpha = 0.5) +
-  facet_wrap(vars(subj_lang))
+  facet_wrap(vars(subj_lang), scales = "free")
 ```
 
+We create a filtered tibble with positive vowel duration.
 
 ```{r}
+#| label: nasal-f
+
 nasal_f <- nasal |> 
-  filter(voweln_dur > 0) |> 
+  filter(voweln_dur > 0) |>
   mutate(
+    # For convenience
     voweln_dur_log = log(voweln_dur),
     nas_ampl_q = qlogis(nas_ampl)
   )
 ```
+
+@fig-dur-ampl-f is like @fig-dur-ampl but with filtered data (i.e. only positive vowel nasalisation duration). Spearman's $\rho =$ `r round(cor(nasal_f$nas_ampl, nasal_f$voweln_dur, method = "spearman"), 2)`.
+
+```{r}
+#| label: fig-dur-ampl-f
+#| fig-cap: "Scatter plot of vowel nasalisation amplitude vs duration (filtered data)."
+
+nasal_f |>
+  ggplot(aes(nas_ampl_q, voweln_dur_log)) +
+  geom_point(alpha = 0.5)
+```
+
+## Modelling
 
 ```{r}
 mod_1 <- brm(
@@ -90,6 +179,10 @@ mod_1 <- brm(
   cores = 4,
   file = "data/cache/mod_1f"
 )
+```
+
+```{r}
+summary(mod_1, prob = 0.9)
 ```
 
 ```{r}
@@ -113,7 +206,7 @@ mod_1_r <- mod_1 |>
 mod_1_r |> 
   ggplot(aes(nas_ampl_q, voweln_prop, colour = language)) +
   geom_point(alpha = 0.5) +
-  facet_grid(vars(language))
+  facet_grid(cols = vars(language))
 ```
 
 ```{r}
@@ -122,7 +215,6 @@ mod_1_r |>
   geom_point(alpha = 0.5) +
   facet_wrap(vars(condition))
 ```
-
 
 ```{r}
 mod_1_r |> 
@@ -147,4 +239,3 @@ mod_1_r |>
   geom_line() +
   facet_grid(cols = vars(language))
 ```
-
