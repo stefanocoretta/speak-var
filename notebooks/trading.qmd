@@ -1,5 +1,5 @@
 ---
-title: "Trading cues to nasalisation: vowel nasalisation duration vs amplitude"
+title: "Trading cues to voicing in NC clusters: vowel nasalisation duration and amplitude"
 author: "Stefano Coretta"
 bibliography: references.bib
 ---
