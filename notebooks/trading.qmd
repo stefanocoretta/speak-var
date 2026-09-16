@@ -1,5 +1,5 @@
 ---
-title: "Trading cues to voicing in NC clusters: vowel nasalisation duration and amplitude"
+title: "Trading cues to voicing in NC clusters: proportion and amplitude"
 author: "Stefano Coretta"
 bibliography: references.bib
 ---
@@ -39,24 +39,18 @@ The following code cleans the data and joins the two tibbles into a single tibbl
 nasal <- bind_rows(nasal_en, nasal_de) |>
   
   # Drop NA values in the specified columns
-  drop_na(velumopening_maxvel_on, velumopening_maxvel_off) |>
+  drop_na(velumopening_maxvel_on) |>
   
   mutate(
-    # Amplitude of nasalisation within the vowel (articulatory)
-    nas_ampl = velum2US_Vokal_max,
+    # Amplitude of velum opening within the vowel (articulatory)
+    vel_max = velum2US_Vokal_max,
+    vel_max_q = qlogis(vel_max),
     
-    # Pseudo-gestural nasalisation onset and offset (articulatory)
-    art_nas_on = velumopening_nucleus_on - ((velumopening_nucleus_on - velumopening_maxvel_on) / 2),
-    art_nas_off = velumopening_nucleus_off + ((velumopening_maxvel_off - velumopening_nucleus_off) / 2),
+    # Onset of velum opening gesture (articulatory)
+    vel_on = velumopening_nucleus_on - ((velumopening_nucleus_on - velumopening_maxvel_on) / 2),
 
-    # Pseudo-gestural nasalisation duration within the vowel and within the coda
-    # (acoustic/articulatory)
-    voweln_dur = (Vokal_off - art_nas_on) * 1000,
-    codan_dur = (art_nas_off - Vokal_off) * 1000,
-
-    # Proportion of nasalisation in the vowel and coda (acoustic/articulatory)
-    voweln_prop = voweln_dur / (Vokal_dur * 1000),
-    codan_prop = codan_dur / (Coda_dur * 1000),
+    # Onset of velum opening relative to the vowel offset (acoustic/articulatory)
+    vel_on_rel = (vel_on - Vokal_off) * 1000,
 
     # Factorisation
     vow_lang = factor(interaction(vowel, language, sep = "_")),
@@ -66,7 +60,7 @@ nasal <- bind_rows(nasal_en, nasal_de) |>
   ) |> 
   
   # Select necessary columns
-  select(nas_ampl:subj_lang, language, Vokal_off, Coda_off, Coda_dur, nc_voicing, Satz_dur)
+  select(vel_max:subj_lang, language, Vokal_off, Coda_off, Coda_dur, nc_voicing, Satz_dur)
 
 ```
 
@@ -82,29 +76,14 @@ knitr::kable(head(nasal), digits = 2)
 
 ## Plotting
 
-@fig-vowelndur shows the density plot of the duration of nasalisation within the vowel in the three languages. Due to the nature of the measurements, some durations are negative (albeit being impossible in principle, nasalisation must start when the nasal consonant starts by definition). The right panel shows the same data but filtered to include only positive duration.
+@fig-velonrel shows the density plot of the onset of velum opening relative to the vowel offset in the three languages. Due to the nature of the articulatory measurements, some values are positive. We keep the data anyway since this is to illustrate the use of multi-level models.
 
 ```{r}
-#| label: fig-vowelndur
+#| label: fig-velonrel
 #| fig-cap: "Density plot of the vowel nasalisation duration."
-#| fig-subcap: 
-#| - "All data."
-#| - "Filter data (positive duration)."
-#| layout-ncol: 2
 
 nasal |> 
-  ggplot(aes(voweln_dur, fill = language)) +
-  geom_density() +
-  geom_rug(alpha = 0.1) +
-  facet_grid(vars(language)) +
-  labs(
-    x = "Vowel nasalisation duration (ms)"
-  ) +
-  theme(legend.position = "none")
-
-nasal |> 
-  filter(voweln_dur > 0) |> 
-  ggplot(aes(voweln_dur, fill = language)) +
+  ggplot(aes(vel_on_rel, fill = language)) +
   geom_density() +
   geom_rug(alpha = 0.1) +
   facet_grid(vars(language)) +
@@ -114,74 +93,65 @@ nasal |>
   theme(legend.position = "none")
 ```
 
-@fig-dur-ampl shows a scatter plot of the amplitude of vowel nasalisation vs its duration. The plot suggests a positive correlation between amplitude and duration (Spearman's $\rho =$ `r round(cor(nasal$nas_ampl, nasal$voweln_dur, method = "spearman"), 2)`).
+@fig-on-ampl shows a scatter plot of the amplitude of velum opening vs its timing. The plot suggests a negative correlation between amplitude and timing (Spearman's $\rho =$ `r round(cor(nasal$vel_on_rel, nasal$vel_max, method = "spearman"), 2)`).
 
 ```{r}
-#| label: fig-dur-ampl
-#| fig-cap: "Scatter plot of vowel nasalisation amplitude vs duration."
+#| label: fig-on-ampl
+#| fig-cap: "Scatter plot of velum opening timing vs amplitude."
 
 nasal |> 
-  filter(voweln_dur > 0) |> 
-  ggplot(aes(qlogis(nas_ampl), log(voweln_dur))) +
+  ggplot(aes(vel_on_rel, vel_max_q)) +
   geom_point(alpha = 0.5) +
   labs(
-    x = "Vowel nasalisation amplitude (logistic transf.)",
-    y = "Vowel nasalisation duration (logged)"
+    x = "Velum opening onset",
+    y = "Velum opening amplitude (logistic transf.)",
   )
 ```
 
 
 ```{r}
-#| label: fig-dur-ampl-speaker
-#| fig-cap: "Scatter plot of vowel nasalisation amplitude vs duration by speaker."
+#| label: fig-on-ampl-speaker
+#| fig-cap: "Scatter plot of velum opening timing vs amplitude by speaker."
 
-nasal |> 
-  filter(voweln_dur > 0) |> 
-  ggplot(aes(qlogis(nas_ampl), log(voweln_prop))) +
+nasal |>
+  ggplot(aes(vel_on_rel, vel_max_q)) +
   geom_point(alpha = 0.5) +
   facet_wrap(vars(subj_lang), scales = "free")
 ```
 
-We create a filtered tibble with positive vowel duration.
-
-```{r}
-#| label: nasal-f
-
-nasal_f <- nasal |> 
-  filter(voweln_dur > 0) |>
-  mutate(
-    # For convenience
-    voweln_dur_log = log(voweln_dur),
-    nas_ampl_q = qlogis(nas_ampl)
-  )
-```
-
-@fig-dur-ampl-f is like @fig-dur-ampl but with filtered data (i.e. only positive vowel nasalisation duration). Spearman's $\rho =$ `r round(cor(nasal_f$nas_ampl, nasal_f$voweln_dur, method = "spearman"), 2)`.
-
-```{r}
-#| label: fig-dur-ampl-f
-#| fig-cap: "Scatter plot of vowel nasalisation amplitude vs duration (filtered data)."
-
-nasal_f |>
-  ggplot(aes(nas_ampl_q, voweln_dur_log)) +
-  geom_point(alpha = 0.5)
-```
 
 ## Modelling
 
+We are modelling C voicing as a function of velum opening onset and amplitude. This allows us to see how the relationship with C voicing varies for timing and amplitude in each speaker.
+
 ```{r}
+#| label: mod-1
+
+nasal <- nasal |> 
+  mutate(
+    vel_on_rel_c = vel_on_rel - mean(vel_on_rel)
+  )
+
 mod_1 <- brm(
-  nc_voicing ~ voweln_prop + nas_ampl_q + Satz_dur +
-    (voweln_prop + nas_ampl_q | language/subj_lang),
-  data = nasal_f,
+  nc_voicing ~ vel_on_rel_c + vel_max_q + Satz_dur +
+    (vel_on_rel_c + vel_max_q | language/subj_lang),
+  data = nasal,
   family = bernoulli(),
+  prior = c(
+    prior(normal(0, 2.5), class = Intercept),
+    prior(normal(0, 1), class = b),
+    prior(student_t(3, 0, 2.5), class = sd),
+    prior(lkj(2), class = cor)
+  ),
   seed = 6183,
   cores = 4,
-  file = "data/cache/mod_1f"
+  file = "data/cache/mod_1"
 )
 ```
 
 ```{r}
+#| label: mod-1-summary
+
 summary(mod_1, prob = 0.9)
 ```
 
@@ -204,14 +174,14 @@ mod_1_r <- mod_1 |>
 
 ```{r}
 mod_1_r |> 
-  ggplot(aes(nas_ampl_q, voweln_prop, colour = language)) +
+  ggplot(aes(vel_max_q, voweln_prop, colour = language)) +
   geom_point(alpha = 0.5) +
   facet_grid(cols = vars(language))
 ```
 
 ```{r}
 mod_1_r |> 
-  ggplot(aes(nas_ampl_q, voweln_prop, colour = language)) +
+  ggplot(aes(vel_max_q, voweln_prop, colour = language)) +
   geom_point(alpha = 0.5) +
   facet_wrap(vars(condition))
 ```
@@ -220,7 +190,7 @@ mod_1_r |>
 mod_1_r |> 
   group_by(language, .draw) |> 
   summarise(
-    cor = cor(nas_ampl_q, voweln_prop),
+    cor = cor(vel_max_q, voweln_prop),
     .groups = "drop_last"
   ) |> 
   summarise_draws(cor, ~quantile(.x, c(0.025,0.975)) |> round(2))
@@ -230,7 +200,7 @@ mod_1_r |>
 mod_1_r |> 
   group_by(condition, language) |> 
   summarise(
-    mean_amp = mean(nas_ampl_q), 
+    mean_amp = mean(vel_max_q), 
     mean_dur = mean(voweln_prop)
   ) |> 
   pivot_longer(mean_amp:mean_dur) |> 
