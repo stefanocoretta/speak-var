@@ -1,8 +1,17 @@
 ---
-title: "Trading cues to voicing in NC clusters: proportion and amplitude"
+title: "Trading characteristics of voicing in NC clusters: velum opening onset and amplitude"
 author: "Stefano Coretta"
 bibliography: references.bib
 ---
+
+## Overview
+
+This document illustrates how to investigate trading of velum opening timing and its amplitude in individual speakers. The data comes from @carignan2021a and @cunha2024. I refer the reader to the papers for more information on the data. In brief, speakers of German, British or American English had to read words containing VNC sequences while being recorded with functional MRI. The consonant C in the cluster is either voiced or voiceless (for example, *send* vs *sent*).
+
+A nasal consonant requires the velum to be open, but voiceless stops require a tight velum seal to maintain voiceless. It has been proposed that in VNT (where T is a voiceless stop), the velum opening gesture is produced earlier during the vowel than in VND. This should also correspond to greater velum opening at vowel offset in VNT than in VND. Moreover, there should be a negative correlation between opening onset measured from the vowel offset and velum opening magnitude.
+
+A related question is whether speakers, in their productions, trade the time of the velum opening gesture and its amplitude at vowel offset (so that for example, speakers that have an even earlier timing than average also have a greater opening amplitude than average), or whether timing and amplitude are manipulated separately.
+
 
 ## The data
 
@@ -17,7 +26,7 @@ library(tidybayes)
 theme_set(theme_light())
 ```
 
-The data comes from @carignan2021a and @cunha2024. I refer the reader to the papers for more information on the data. The data is split in two files, one with the German data and one with the American and British English data. The data contains measures from audio recordings and fMRI recordings.
+ The data is split in two files, one with the German data and one with the American and British English data. The data contains measures from audio recordings and fMRI recordings.
 
 ```{r}
 #| label: data
@@ -122,7 +131,7 @@ nasal |>
 
 ## Modelling
 
-We are modelling C voicing as a function of velum opening onset and amplitude. This allows us to see how the relationship with C voicing varies for timing and amplitude in each speaker.
+We are modelling C voicing as a function of velum opening onset and amplitude. This allows us to see how the relationship with C voicing varies for timing and amplitude in each speaker. The model is a Bernoulli model estimating the probability that the consonant in the VNC sequence is *voiceless*.
 
 ```{r}
 #| label: mod-1
@@ -149,17 +158,33 @@ mod_1 <- brm(
 )
 ```
 
+The model was not converging with default priors, so I set weakly informative priors. That produces 20 divergent transitions after warmup, which I am fine with. Here is the model summary.
+
 ```{r}
 #| label: mod-1-summary
 
 summary(mod_1, prob = 0.9)
 ```
 
+First, as per the regression coefficient `vel_on_rel_c`, later velum opening onset correspond to a change in probability of a voiceless stop by -012 to +0.07 log-odds. In other words, there is a level of uncertainty on whether later velum opening is linked to a greater probability of a voiceless stop.
+
+On the other hand, as per the regression coefficient `vel_max_q`, greater velum opening amplitude corresponds to a decrease in probability of a voiceless stop by -1.58 to -0.45 log-odds. This is counter the hypotheses that VNT sequences should show greater velum opening amplitude (in fact, it is the opposite).
+
+However, we can ask whether speakers still trade the effects of velum opening timing and amplitude. The relevant parameter is the hyper-parameter `cor(vel_on_rel_c,vel_max_q)` in `~language:subj_lang`. This parameter tells us the correlation between the by-speaker adjustments of the `vel_on_rel_c` and `vel_max_q` effects. In this case, the correlation is quite certainly positive: if a speaker shows a stronger effect of timing they also show a stronger effect of amplitude.
+
+Let's extract the posterior draws.
+
 ```{r}
+#| label: mod-1-draws
+
 mod_1_draws <- as_draws_df(mod_1)
 ```
 
+In the following, I extract the draws for the multilevel hyper-parameters of the speakers (`subj_lang`). We will need the `vel_max_q` and the `vel_on_rel_c` draws.
+
 ```{r}
+#| label: mod-1-r
+
 mod_1_r <- mod_1 |> 
   spread_draws(`r_language:subj_lang`[condition,term]) |> 
   pivot_wider(names_from = term, values_from = `r_language:subj_lang`) |> 
@@ -173,39 +198,58 @@ mod_1_r <- mod_1 |>
 ```
 
 ```{r}
+#| label: fig-draws-scatter
+#| fig-cap: "Scatter plot showing a selection of posterior draws of the by-speaker multilevel hyperparameters for the regression coefficients of velum opening onset and amplitude."
+
 mod_1_r |> 
-  ggplot(aes(vel_max_q, voweln_prop, colour = language)) +
-  geom_point(alpha = 0.5) +
+  ungroup() |> 
+  slice_sample(n = 300, by = language) |> 
+  ggplot(aes(vel_max_q, vel_on_rel_c)) +
+  geom_point(alpha = 0.25) +
+  geom_smooth(aes(colour = language), method = "lm") +
   facet_grid(cols = vars(language))
 ```
 
-```{r}
-mod_1_r |> 
-  ggplot(aes(vel_max_q, voweln_prop, colour = language)) +
-  geom_point(alpha = 0.5) +
-  facet_wrap(vars(condition))
-```
+
 
 ```{r}
+#| label: tbl-cor
+#| tbl-cap: "Mean and 95% CrI of the correlation between posterior draws of the by-speaker multilevel hyperparameters for the regression coefficients of velum opening onset and amplitude."
+
 mod_1_r |> 
   group_by(language, .draw) |> 
   summarise(
-    cor = cor(vel_max_q, voweln_prop),
+    cor = cor(vel_max_q, vel_on_rel_c),
     .groups = "drop_last"
   ) |> 
-  summarise_draws(cor, ~quantile(.x, c(0.025,0.975)) |> round(2))
+  summarise_draws(mean, ~quantile(.x, c(0.025,0.975))) |> 
+  knitr::kable(digits = 2)
 ```
 
+
 ```{r}
+#| label: fig-r-means
+#| fig-cap: "Mean of the z-scores of the posterior draws of the multilevel hyper-parameters of the coefficients of velum opening onset and amplitude, by speaker and language."
+
 mod_1_r |> 
+  ungroup() |> 
+  mutate(
+    vel_max_z = scale(vel_max_q),
+    vel_on_z = scale(vel_on_rel_c)
+  ) |> 
   group_by(condition, language) |> 
   summarise(
-    mean_amp = mean(vel_max_q), 
-    mean_dur = mean(voweln_prop)
+    amplitude = mean(vel_max_z), 
+    onset = mean(vel_on_z),
+    .groups = "drop"
   ) |> 
-  pivot_longer(mean_amp:mean_dur) |> 
+  pivot_longer(amplitude:onset) |> 
   ggplot(aes(name, value, group = condition)) +
   geom_point() +
   geom_line() +
-  facet_grid(cols = vars(language))
+  facet_grid(cols = vars(language)) +
+  labs(
+    x = "Hyper-parameter",
+    y = "Mean (z-scores)"
+  )
 ```
