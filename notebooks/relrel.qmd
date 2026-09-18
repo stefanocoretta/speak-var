@@ -3,8 +3,11 @@ title: "Release to release"
 author: "Stefano Coretta"
 ---
 
+## Overview
+
 ```{r}
 #| label: setup
+#| messages: false
 
 library(tidyverse)
 library(brms)
@@ -12,11 +15,29 @@ library(tidybayes)
 library(coretta2018itaegg)
 ```
 
+In this document, I illustrate how to interpret and plot multilevel hyper-parameters to investigate speaker-specific differences. The data is from @coretta2019. It contains acoustic measurements from CVCV words spoken by Italian speakers. Here, we will investigate how the duration of the interval between the release of the two consonants in the words is affected by the place of articulation of the consonant and the vowel.
+
+## The data
+
 ```{r}
+#| label: ita-egg
+
 data("ita_egg")
 ```
 
 ```{r}
+#| label: tbl-ita-egg
+#| tbl-cap: "First 10 rows of the data."
+
+knitr::kable(head(ita_egg), digits = 0)
+```
+
+
+## Descriptive
+
+```{r}
+#| label: fig-relrel
+#| fig-cap: "Jitter plot of the Release-to-release duration by vowel and place of articulation."
 ita_egg |> 
   ggplot(aes(vowel, rel_rel)) +
   geom_jitter(alpha = 0.5) +
@@ -24,6 +45,8 @@ ita_egg |>
 ```
 
 ```{r}
+#| label: rel
+
 rel <- ita_egg |> 
   drop_na(rel_rel) |> 
   mutate(
@@ -34,16 +57,31 @@ rel <- ita_egg |>
   )
 ```
 
+## Modelling
+
+We will model the Release-to-release duration as a function of C2 place (labial, coronal, velar), vowel (/a, e, i, o, u/) and speech rate. We include varying intercepts by speaker, and by-speaker varying slopes for C2 place and vowel. We do not model correlations between the varying terms for simplicity.
+
 ```{r}
+#| label: rel-1
+
 rel_1 <- brm(
   rel_rel_logz ~ c2_place + vowel + speech_rate_logz +
-    (c2_place + vowel | speaker),
+    (c2_place + vowel || speaker),
   data = rel,
   cores = 4,
   seed = 5285,
   file = "data/cache/rel_1"
 )
 ```
+
+Here is the summary of the model
+
+```{r}
+#| label: rel-1-summary
+
+summary(rel_1, prob = 0.9)
+```
+
 
 ```{r}
 rel_1_speaker <- rel_1 |> 
@@ -91,6 +129,35 @@ voweli_speaker <- rel_1_draws |>
 
 voweli_speaker |> 
   ggplot(aes(voweli, reorder(speaker, voweli, median))) +
+  stat_halfeye()
+```
+
+```{r}
+c2_placecoronal_speaker <- rel_1_draws |> 
+  select(b_c2_placecoronal, ends_with("c2_placecoronal]"), .draw) |> 
+  pivot_longer(-c(b_c2_placecoronal, .draw)) |> 
+  mutate(
+    speaker = str_extract(name, "it\\d\\d"),
+    c2_placecoronal = b_c2_placecoronal + value
+  )
+
+c2_placecoronal_speaker |> 
+  ggplot(aes(c2_placecoronal, reorder(speaker, c2_placecoronal, median))) +
+  stat_halfeye()
+```
+
+
+```{r}
+c2_placevelar_speaker <- rel_1_draws |> 
+  select(b_c2_placevelar, ends_with("c2_placevelar]"), .draw) |> 
+  pivot_longer(-c(b_c2_placevelar, .draw)) |> 
+  mutate(
+    speaker = str_extract(name, "it\\d\\d"),
+    c2_placevelar = b_c2_placevelar + value
+  )
+
+c2_placevelar_speaker |> 
+  ggplot(aes(c2_placevelar, reorder(speaker, c2_placevelar, median))) +
   stat_halfeye()
 ```
 
