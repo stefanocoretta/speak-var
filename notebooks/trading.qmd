@@ -1,16 +1,16 @@
 ---
-title: "Trading characteristics of voicing in NC clusters: velum opening onset and amplitude"
+title: "Velum opening onset timing and amplitude in VNC sequences with voiceless and voiced consonants"
 author: "Stefano Coretta"
 bibliography: references.bib
 ---
 
 ## Overview
 
-This document illustrates how to investigate trading of velum opening timing and its amplitude in individual speakers. The data comes from @carignan2021a and @cunha2024. I refer the reader to the papers for more information on the data. In brief, speakers of German, British or American English had to read words containing VNC sequences while being recorded with functional MRI. The consonant C in the cluster is either voiced or voiceless (for example, *send* vs *sent*).
+This document illustrates how to investigate the relationship of velum opening timing and its amplitude with consonant voicing in VNC sequences in the production of individual speakers. The data comes from @carignan2021a and @cunha2024. I refer the reader to the papers for more information on the data. In brief, speakers of German, British or American English had to read words containing VNC sequences while being recorded with functional MRI. The consonant C in the cluster is either voiced or voiceless (for example, *send* vs *sent*).
 
-A nasal consonant requires the velum to be open, but voiceless stops require a tight velum seal to maintain voiceless. It has been proposed that in VNT (where T is a voiceless stop), the velum opening gesture is produced earlier during the vowel than in VND. This should also correspond to greater velum opening at vowel offset in VNT than in VND. Moreover, there should be a negative correlation between opening onset measured from the vowel offset and velum opening magnitude.
+A nasal consonant requires the velum to be open, but voiceless stops require a tight velum seal to maintain voiceless. It has been proposed that in VNT (where T is a voiceless stop), the velum opening gesture is produced earlier during the vowel than in VND. This should also correspond to greater velum opening at vowel offset in VNT than in VND, assuming a fixed velum opening gesture.
 
-A related question is whether speakers, in their productions, trade the time of the velum opening gesture and its amplitude at vowel offset (so that for example, speakers that have an even earlier timing than average also have a greater opening amplitude than average), or whether timing and amplitude are manipulated separately.
+A related question is whether speakers differ systematically in how strongly they use velum-opening timing and amplitude as production cues to the voicing contrast. In particular, we ask whether the speaker-specific effects of the two cues trade off, such that speakers with a stronger association between one cue and consonant voicing show a weaker association with the other, or whether the two cue effects are positively correlated or vary independently across speakers.
 
 
 ## The data
@@ -89,43 +89,32 @@ knitr::kable(head(nasal), digits = 2)
 
 ```{r}
 #| label: fig-velonrel
-#| fig-cap: "Density plot of the vowel nasalisation duration."
+#| fig-cap: "Density plot of the timing of the velum opening relative to the vowel offset by C voicing."
 
 nasal |> 
-  ggplot(aes(vel_on_rel, fill = language)) +
-  geom_density() +
+  ggplot(aes(vel_on_rel, fill = nc_voicing)) +
+  geom_density(alpha = 0.5) +
   geom_rug(alpha = 0.1) +
   facet_grid(vars(language)) +
   labs(
-    x = "Vowel nasalisation duration (ms)"
+    x = "Velum opening onset (ms from V offset)"
   ) +
   theme(legend.position = "none")
 ```
 
-@fig-on-ampl shows a scatter plot of the amplitude of velum opening vs its timing. The plot suggests a negative correlation between amplitude and timing (Spearman's $\rho =$ `r round(cor(nasal$vel_on_rel, nasal$vel_max, method = "spearman"), 2)`).
-
 ```{r}
-#| label: fig-on-ampl
-#| fig-cap: "Scatter plot of velum opening timing vs amplitude."
+#| label: fig-velampl
+#| fig-cap: "Density plot of the amplitude of the velum opening."
 
 nasal |> 
-  ggplot(aes(vel_on_rel, vel_max_q)) +
-  geom_point(alpha = 0.5) +
+  ggplot(aes(vel_max_q, fill = nc_voicing)) +
+  geom_density(alpha = 0.5) +
+  geom_rug(alpha = 0.1) +
+  facet_grid(vars(language)) +
   labs(
-    x = "Velum opening onset",
-    y = "Velum opening amplitude (logistic transf.)",
-  )
-```
-
-
-```{r}
-#| label: fig-on-ampl-speaker
-#| fig-cap: "Scatter plot of velum opening timing vs amplitude by speaker."
-
-nasal |>
-  ggplot(aes(vel_on_rel, vel_max_q)) +
-  geom_point(alpha = 0.5) +
-  facet_wrap(vars(subj_lang), scales = "free")
+    x = "Velum opening amplitude (logist. transf.)"
+  ) +
+  theme(legend.position = "none")
 ```
 
 
@@ -166,11 +155,22 @@ The model was not converging with default priors, so I set weakly informative pr
 summary(mod_1, prob = 0.9)
 ```
 
-First, as per the regression coefficient `vel_on_rel_c`, later velum opening onset correspond to a change in probability of a voiceless stop by -012 to +0.07 log-odds. In other words, there is a level of uncertainty on whether later velum opening is linked to a greater probability of a voiceless stop.
+First, as per the regression coefficient `vel_on_rel_c`, later velum opening onset correspond to a change in log-odds of a voiceless stop by -0.12 to +0.07. In other words, there is a level of uncertainty on whether later velum opening is linked to a greater probability of a voiceless stop.
 
-On the other hand, as per the regression coefficient `vel_max_q`, greater velum opening amplitude corresponds to a decrease in probability of a voiceless stop by -1.58 to -0.45 log-odds. This is counter the hypotheses that VNT sequences should show greater velum opening amplitude (in fact, it is the opposite).
+On the other hand, as per the regression coefficient `vel_max_q`, greater velum opening amplitude corresponds to a decrease in log-odds of a voiceless stop by -1.58 to -0.45. This is counter the hypothesis that VNT sequences should show greater velum opening amplitude.
 
-However, we can ask whether speakers still trade the effects of velum opening timing and amplitude. The relevant parameter is the hyper-parameter `cor(vel_on_rel_c,vel_max_q)` in `~language:subj_lang`. This parameter tells us the correlation between the by-speaker adjustments of the `vel_on_rel_c` and `vel_max_q` effects. In this case, the correlation is quite certainly positive: if a speaker shows a stronger effect of timing they also show a stronger effect of amplitude.
+```{r}
+#| label: mod-2-cond
+
+conditional_effects(mod_1, "vel_max_q")
+conditional_effects(mod_1, "vel_on_rel_c")
+```
+
+
+However, we can ask how the effects of velum opening timing and amplitude on the probability of a voiceless consonant in VNC sequences differ relative to each other in each individual speaker. The relevant parameter is the hyper-parameter `cor(vel_on_rel_c,vel_max_q)` in `~language:subj_lang`. This parameter tells us the correlation between the by-speaker adjustments of the `vel_on_rel_c` and `vel_max_q` effects. In this case, the correlation is quite certainly positive: if a speaker shows a stronger effect of timing they also show a stronger effect of amplitude.
+
+Since the effect of opening amplitude is clearly negative, this means that in speakers with a greater effect of timing, the effect of amplitude is less negative.
+
 
 Let's extract the posterior draws.
 
@@ -186,14 +186,16 @@ In the following, I extract the draws for the multilevel hyper-parameters of the
 #| label: mod-1-r
 
 mod_1_r <- mod_1 |> 
-  spread_draws(`r_language:subj_lang`[condition,term]) |> 
+  spread_draws(`r_language:subj_lang`[condition,term], b_vel_max_q, b_vel_on_rel_c) |> 
   pivot_wider(names_from = term, values_from = `r_language:subj_lang`) |> 
   mutate(
     language = case_when(
       str_ends(condition, "de") ~ "DE",
       str_ends(condition, "us") ~ "US",
       str_ends(condition, "br") ~ "BR"
-    )
+    ),
+    bs_vel_max = b_vel_max_q + vel_max_q,
+    bs_vel_on = b_vel_on_rel_c + vel_on_rel_c
   )
 ```
 
@@ -211,7 +213,6 @@ mod_1_r |>
 ```
 
 
-
 ```{r}
 #| label: tbl-cor
 #| tbl-cap: "Mean and 95% CrI of the correlation between posterior draws of the by-speaker multilevel hyperparameters for the regression coefficients of velum opening onset and amplitude."
@@ -227,29 +228,26 @@ mod_1_r |>
 ```
 
 
+The speaker-specific effects of velum-opening timing and amplitude are strongly positively correlated (ρ = 0.83, 90% CrI [0.67, 0.94]). Thus, speakers do not show evidence of trading the two articulatory parameters against one another. Instead, the two effects are positively coordinated: speakers who show a relatively stronger association between velum-opening onset and consonant voicing also tend to show a relatively stronger association between velum-opening amplitude and consonant voicing. This suggests systematic individual differences in parameter weighting, with some speakers showing stronger parameter–voicing associations across both dimensions and others showing weaker associations across both.
+
+In sum, individual differences appear to lie partly along a common dimension of parameter strength: speakers with a strong association between earlier velum opening and voicelessness also tend to show a strong association between lower velum-opening amplitude and voicelessness, whereas speakers with a weaker onset association tend also to show a weaker amplitude association. This is illustrated in @fig-bs-scatter.
+
 ```{r}
-#| label: fig-r-means
-#| fig-cap: "Mean of the z-scores of the posterior draws of the multilevel hyper-parameters of the coefficients of velum opening onset and amplitude, by speaker and language."
+#| label: fig-bs-scatter
+#| fig-cap: "Mean speaker-specific effects of velum opening onset and amplitude on the probability of a voiceless stop."
 
 mod_1_r |> 
   ungroup() |> 
-  mutate(
-    vel_max_z = scale(vel_max_q),
-    vel_on_z = scale(vel_on_rel_c)
-  ) |> 
   group_by(condition, language) |> 
   summarise(
-    amplitude = mean(vel_max_z), 
-    onset = mean(vel_on_z),
+    bs_vel_on = mean(bs_vel_on),
+    bs_vel_max = mean(bs_vel_max),
     .groups = "drop"
   ) |> 
-  pivot_longer(amplitude:onset) |> 
-  ggplot(aes(name, value, group = condition)) +
+  ggplot(aes(bs_vel_on, bs_vel_max, colour = language, shape = language)) +
   geom_point() +
-  geom_line() +
-  facet_grid(cols = vars(language)) +
   labs(
-    x = "Hyper-parameter",
-    y = "Mean (z-scores)"
+    x = "Onset effect (log-odds)",
+    y = "Amplitude effect (log-odds)"
   )
 ```
