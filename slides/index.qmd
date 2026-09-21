@@ -1,0 +1,27 @@
+---
+title: "Bayesian multilevel modelling and estimation of uncertainty in speaker variation"
+author: "Stefano Coretta"
+format: revealjs
+---
+
+## Bayesian inference
+
+$$
+P(h \mid d) \propto P(h) \cdot P(d \mid h)
+$$
+
+where:
+
+- $P(h)$ is the *prior probability* of $h$.
+- $P(d \mid h)$ is the probability of $d$ given $h$ (aka *likelihood*).
+- $P(h \mid d)$ is the *posterior probability* of $h$ given $d$.
+
+## Bayesian updating
+
+```{=html}
+<iframe width="100%" height="500" src="https://nanx.shinyapps.io/conjugate-normal-umkv/"></iframe>
+```
+
+::: aside
+App by [Nan Xiao](https://nanx.me), code on <https://github.com/nanxstats/conjugate-normal-umkv>
+:::
