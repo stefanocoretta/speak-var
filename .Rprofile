@@ -4,7 +4,8 @@ set_up <- function() {
   
   remotes <- c(
     "stan-dev/cmdstanr",
-    "stefanocoretta/coretta2018itaegg"
+    "stefanocoretta/coretta2018itaegg",
+    "stefanocoretta/coretta2019eng"
   )
   
   # Install GitHub packages
