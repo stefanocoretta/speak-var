@@ -15,6 +15,8 @@ data("eng_durations")
 library(brms)
 library(tidybayes)
 
+library(MASS)
+
 ```
 
 ## Bayesian inference
@@ -52,7 +54,164 @@ eng_durations |>
 
 ```
 
-## Modelling
+## Regression model
+
+$$
+\begin{aligned}
+v_i & \sim LogNormal(\mu_i, \sigma)\\
+\mu_i & = \beta_0 + \beta_1 \cdot voi_i
+\end{aligned}
+$$
+
+## Regression model: varying terms
+
+$$
+\begin{aligned}
+v_i & \sim LogNormal(\mu_i, \sigma)\\
+\mu_i & = \beta_0 + u_{0j} + (\beta_1 + u_{1j}) \cdot voi_{ij}\\
+\begin{pmatrix}u_{0j}\\u_{1j}\end{pmatrix}& \sim \mathcal{MVN} \left(\begin{pmatrix}0\\0\end{pmatrix},\begin{pmatrix}\tau_0^2 & \rho\tau_0\tau_1\\\rho\tau_0\tau_1 & \tau_1^2\end{pmatrix}\right)
+\end{aligned}
+$$
+
+. . .
+
+- $j$: speaker index
+
+- $u_{0j}$: speaker-specific intercept adjustments
+
+- $u_{1j}$: speaker-specific slope adjustments (i.e. effect of voicing)
+
+## Varying terms matrix
+
+$$
+\begin{aligned}
+\begin{pmatrix}u_{0j}\\u_{1j}\end{pmatrix}& \sim \mathcal{MVN} \left(\begin{pmatrix}0\\0\end{pmatrix},\begin{pmatrix}\tau_0^2 & \rho\tau_0\tau_1\\\rho\tau_0\tau_1 & \tau_1^2\end{pmatrix}\right)
+\end{aligned}
+$$
+
+- $\mathcal{MVN}$: multivariate normal (Gaussian)
+
+- $\tau_0^2$: variance among speaker-specific intercepts
+
+- $\tau_1^2$: variance among speaker-specific slopes
+
+- $\rho$: correlation between speaker-specific intercepts ($u_{0j}$) and slopes ($u_{1j}$)
+
+## Variance-covariance matrix
+
+$$
+\begin{aligned}
+\begin{pmatrix}\tau_0^2 & \rho\tau_0\tau_1\\\rho\tau_0\tau_1 & \tau_1^2\end{pmatrix} = \begin{pmatrix}\tau_0 & 0\\0 & \tau_1\end{pmatrix}
+\begin{pmatrix}1 & \rho\\\rho & 1\end{pmatrix}
+\begin{pmatrix}\tau_0 & 0\\0 & \tau_1\end{pmatrix}
+\end{aligned}
+$$
+
+- $\tau_0$: standard deviation of speaker-specific intercepts
+
+- $\tau_1$: standard deviation of speaker-specific slopes
+
+- $\rho$: correlation between speaker-specific intercepts ($u_{0j}$) and slopes ($u_{1j}$)
+
+## $\tau_0$ example
+
+```{r}
+#| label: tau0
+
+x <- seq(-0.6, 0.6, by = 0.01)
+y <- dnorm(x, sd = 0.2)
+
+tau0 <- ggplot() +
+  aes(x, y) +
+  geom_vline(xintercept = 0, colour = "gray") +
+  geom_line() +
+  labs(
+    title = expression(tau[0] == 0.2)
+  )
+
+tau0
+```
+
+## $\tau_0$ example: 15 speakers (sample A)
+
+```{r}
+#| label: tau0-15
+
+set.seed(42368)
+u <- rnorm(15, 0, 0.2)
+
+tau0 +
+  geom_point(aes(u, 0), colour = "indianred", size = 3, shape = 1)
+```
+
+## $\tau_0$ example: 15 speakers (sample B)
+
+```{r}
+#| label: tau0-15
+
+set.seed(423610)
+u <- rnorm(15, 0, 0.2)
+
+tau0 +
+  geom_point(aes(u, 0), colour = "indianred", size = 3, shape = 1)
+```
+
+## $\rho$ example
+
+```{r}
+set.seed(123)
+
+# Parameters
+n_speakers <- 15
+tau_0 <- 0.2
+tau_1 <- 0.04
+
+# Nine correlations
+rho_values <- c(-0.9, -0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6, 0.9)
+
+# Simulate speaker-specific intercept and slope adjustments
+sim_data <- lapply(rho_values, function(rho) {
+  
+  Sigma <- matrix(
+    c(tau_0^2, rho * tau_0 * tau_1,
+      rho * tau_0 * tau_1, tau_1^2),
+    nrow = 2
+  )
+  
+  u <- mvrnorm(
+    n = n_speakers,
+    mu = c(0, 0),
+    Sigma = Sigma
+  )
+  
+  data.frame(
+    speaker = 1:n_speakers,
+    u_0 = u[, 1],
+    u_1 = u[, 2],
+    rho = rho
+  )
+}) |> 
+  bind_rows()
+
+ggplot(sim_data, aes(x = u_0, y = u_1)) +
+  geom_hline(yintercept = 0, linewidth = 0.3, colour = "gray") +
+  geom_vline(xintercept = 0, linewidth = 0.3, colour = "gray") +
+  geom_point(size = 2.5, colour = "indianred", shape = 1) +
+  facet_wrap(
+    ~ rho,
+    nrow = 3,
+    ncol = 3,
+    labeller = labeller(
+      rho = function(x) paste0("ρ = ", x)
+    )
+  ) +
+  labs(
+    x = expression(u[0*j] ~ "(intercept adjustment)"),
+    y = expression(u[1*j] ~ "(slope adjustment)")
+  )
+```
+
+## Fitting the model
 
 ```{r}
 #| label: ve-bm
@@ -65,6 +224,15 @@ ve_bm <- brm(
   seed = 2136,
   file = "data/cache/ve_bm"
 )
+
+```
+
+## Multilevel hyper-parameters summary
+
+```{r}
+#| label: ve-bm-summary
+
+summary(ve_bm, prob = 0.9)
 
 ```
 
