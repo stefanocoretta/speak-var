@@ -159,6 +159,8 @@ tau0 +
 ## $\rho$ example
 
 ```{r}
+#| label: rho
+
 set.seed(123)
 
 # Parameters
@@ -236,25 +238,90 @@ summary(ve_bm, prob = 0.9)
 
 ```
 
-```{r}
-conditional_effects(ve_bm, "voicing")
-```
+## Intercept of vowel duration
 
 ```{r}
+#| label: int
+
+ve_draws <- as_draws_df(ve_bm) |> 
+  mutate(
+    int_exp = exp(b_Intercept),
+    voi_r = exp(b_voicingvoiced),
+    voiceless = int_exp,
+    voiced = exp(b_Intercept + b_voicingvoiced)
+  )
+
+ve_draws |> 
+  ggplot(aes(int_exp)) +
+  geom_density(fill = "aquamarine4", colour = NA) +
+  labs(
+    x = "Intercept of V duration (ms)"
+  )
+```
+
+## Effect of voicing
+
+```{r}
+#| label: voi-ratio
+
+ve_draws |> 
+  ggplot(aes(voi_r)) +
+  geom_vline(xintercept = 1, colour = "deepskyblue4") +
+  geom_density(fill = "tomato3", colour = NA) +
+  labs(
+    x = "Voicing effect ratio"
+  )
+```
+## Expected values of vowel duration
+
+```{r}
+#| label: ve-post
+#| warning: false
+
+ve_draws |> 
+  dplyr::select(voiceless, voiced) |> 
+  pivot_longer(c(voiceless, voiced), names_to = "voicing") |> 
+  mutate(voicing = factor(voicing, c("voiceless", "voiced"))) |> 
+  ggplot(aes(value, fill = voicing)) +
+  geom_density(alpha = 0.85, colour = NA) +
+  scale_fill_brewer(type = "qual") +
+  labs(
+    x = "Expected V duration (ms)"
+  )
+```
+
+## By-speaker adjustments to intercept
+
+```{r}
+#| label: r-int
+
 ve_speaker <- ve_bm |> 
   spread_draws(r_speaker[speaker,coef], b_voicingvoiced) |> 
   mutate(
     bs_voicing = b_voicingvoiced + r_speaker
   )
-```
 
-```{r}
 ve_speaker |> 
   filter(coef == "Intercept") |> 
   ggplot(aes(r_speaker, reorder(speaker, r_speaker, median))) +
   geom_vline(xintercept = 0) +
-  stat_halfeye()
+  stat_halfeye() +
+  labs(
+    x = "By-speaker intercept adjustment (log)",
+    y = "Speaker"
+  )
 ```
+
+## $\tau_0$: SD of speaker-specific adjustments
+
+```{r}
+#| label: tau0-post
+
+ve_draws |> 
+  ggplot(aes(sd_speaker__Intercept)) +
+  geom_density(fill = "forestgreen", colour = NA)
+```
+
 
 ```{r}
 ve_speaker |> 
@@ -265,12 +332,6 @@ ve_speaker |>
 ```
 
 ```{r}
-ve_speaker |> 
-  filter(coef == "voicingvoiced") |> 
-  ggplot(aes(bs_voicing, reorder(speaker, bs_voicing, median))) +
-  geom_vline(xintercept = 0) +
-  stat_halfeye()
-
 ve_speaker |> 
   filter(coef == "voicingvoiced") |> 
   ggplot(aes(exp(bs_voicing), reorder(speaker, bs_voicing, median))) +
