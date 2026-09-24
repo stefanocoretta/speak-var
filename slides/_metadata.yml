@@ -1,0 +1,12 @@
+format:
+  revealjs:
+    slide-number: true
+    history: false
+    theme: [default, custom.scss]
+    fig-align: center
+    fig-width: 7
+    title-slide-attributes:
+      data-background: |
+        ```{=html}
+        var(--inverse)
+        ```

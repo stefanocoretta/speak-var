@@ -19,6 +19,74 @@ library(MASS)
 
 ```
 
+## {background="var(--inverse)"}
+
+::: r-fit-text
+What does it mean to model speaker variation?
+:::
+
+. . .
+
+::: r-fit-text
+It means to model the population of speakers.
+:::
+
+## English voicing effect
+
+```{r}
+#| label: ve
+
+ve_plot <- eng_durations |> 
+  ggplot(aes(vowel_ipa, v1_duration, colour = voicing)) +
+  scale_color_brewer(type = "qual") +
+  labs(
+    x = "Vowel",
+    y = "Vowel duration (ms)",
+    colour = "Consonant\nvoicing",
+    caption = "15 speakers from Manchester"
+  )
+ve_plot
+```
+
+## English voicing effect
+
+```{r}
+#| label: ve-2
+
+ve_plot +
+  geom_jitter(alpha = 0.5, position = position_jitterdodge(jitter.width = 0.2, seed = 4127))
+```
+
+## Four speakers
+
+```{r}
+#| label: ve-3
+
+eng_durations |> 
+  filter(speaker %in% c("en01", "en02", "en10", "en12")) |> 
+  ggplot(aes(vowel_ipa, v1_duration, colour = voicing)) +
+  geom_jitter(alpha = 0.75, position = position_jitterdodge(jitter.width = 0.2, seed = 4127)) +
+  facet_wrap(vars(speaker)) +
+  scale_color_brewer(type = "qual") +
+  labs(
+    x = "Vowel",
+    y = "Vowel duration (ms)",
+    colour = "Consonant\nvoicing"
+  )
+```
+
+## Modelling the distribution of speakers
+
+(Bayesian) multilevel regression models
+
+. . .
+
+aka hierarchical
+
+. . .
+
+aka mixed-effects
+
 ## Bayesian inference
 
 $$
@@ -41,18 +109,6 @@ where:
 App by [Nan Xiao](https://nanx.me), code on <https://github.com/nanxstats/conjugate-normal-umkv>
 :::
 
-## English voicing effect
-
-```{r}
-#| label: ve
-
-eng_durations |> 
-  ggplot(aes(vowel_ipa, v1_duration, colour = voicing)) +
-  geom_jitter(alpha = 0.5, position = position_jitterdodge(jitter.width = 0.2)) +
-  facet_grid(vars(num_syl)) +
-  scale_color_brewer(type = "qual")
-
-```
 
 ## Regression model
 
@@ -63,7 +119,7 @@ v_i & \sim LogNormal(\mu_i, \sigma)\\
 \end{aligned}
 $$
 
-## Regression model: varying terms
+## Multilevel regression model: varying terms
 
 $$
 \begin{aligned}
@@ -141,7 +197,12 @@ set.seed(42368)
 u <- rnorm(15, 0, 0.2)
 
 tau0 +
-  geom_point(aes(u, 0), colour = "indianred", size = 3, shape = 1)
+  geom_point(aes(u, 0), colour = "indianred", size = 3, shape = 1) +
+  labs(
+    x = expression(u[0] ~ "(intercept adjusment)"),
+    y = "density",
+    caption = "Each circle is a speaker."
+  )
 ```
 
 ## $\tau_0$ example: 15 speakers (sample B)
@@ -153,13 +214,19 @@ set.seed(423610)
 u <- rnorm(15, 0, 0.2)
 
 tau0 +
-  geom_point(aes(u, 0), colour = "indianred", size = 3, shape = 1)
+  geom_point(aes(u, 0), colour = "indianred", size = 3, shape = 1) +
+  labs(
+    x = expression(u[0] ~ "(intercept adjusment)"),
+    y = "density",
+    caption = "Each circle is a speaker."
+  )
 ```
 
 ## $\rho$ example
 
 ```{r}
 #| label: rho
+#| warning: false
 
 set.seed(123)
 
@@ -195,10 +262,9 @@ sim_data <- lapply(rho_values, function(rho) {
 }) |> 
   bind_rows()
 
-ggplot(sim_data, aes(x = u_0, y = u_1)) +
+rho_plot <- ggplot(sim_data, aes(x = u_0, y = u_1)) +
   geom_hline(yintercept = 0, linewidth = 0.3, colour = "gray") +
   geom_vline(xintercept = 0, linewidth = 0.3, colour = "gray") +
-  geom_point(size = 2.5, colour = "indianred", shape = 1) +
   facet_wrap(
     ~ rho,
     nrow = 3,
@@ -208,10 +274,24 @@ ggplot(sim_data, aes(x = u_0, y = u_1)) +
     )
   ) +
   labs(
-    x = expression(u[0*j] ~ "(intercept adjustment)"),
-    y = expression(u[1*j] ~ "(slope adjustment)")
+    x = expression(u[0] ~ "(intercept adjustment)"),
+    y = expression(u[1] ~ "(slope adjustment)"),
+    caption = "Each circle is a speaker."
   )
+
+rho_plot +
+  geom_point(size = 2.5, colour = NA, shape = 1)
 ```
+
+## $\rho$ example
+
+```{r}
+#| label: rho-2
+
+rho_plot +
+  geom_point(size = 2.5, colour = "indianred", shape = 1)
+```
+
 
 ## Fitting the model
 
@@ -321,6 +401,29 @@ ve_draws |>
   ggplot(aes(sd_speaker__Intercept)) +
   geom_density(fill = "forestgreen", colour = NA)
 ```
+
+## $u_0$ posterior probability (20 draws)
+
+```{r}
+#| label: tau0
+
+set.seed(5364)
+
+expand_grid(
+  sd = sample(ve_draws$sd_speaker__Intercept, size = 20),
+  u = seq(-1, 1, by = 0.01)
+) |> 
+  mutate(
+    dens = dnorm(u, 0, sd = sd)
+  ) |> 
+  ggplot(aes(u, dens, group = sd)) +
+  geom_path(alpha = 0.25) +
+  labs(
+    x = expression(u[0] ~ "(intercept adjusment)"),
+    y = "density"
+  )
+```
+
 
 
 ```{r}
